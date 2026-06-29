@@ -45,8 +45,9 @@ def _llm_chat(messages: list[dict], system: str | None = None) -> str | None:
     }
     import requests as req
     try:
+        url = f"{LLM_API_URL.rstrip('/')}/chat/completions"
         r = req.post(
-            f"{LLM_API_URL}/v1/chat/completions",
+            url,
             headers={"Authorization": f"Bearer {LLM_API_KEY}"},
             json=payload,
             timeout=120,
