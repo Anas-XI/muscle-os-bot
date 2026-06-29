@@ -35,6 +35,7 @@ test_e2e_pipeline.py
 .idea/
 .vscode/
 *.swp
+.claude/
 
 # OS
 Thumbs.db

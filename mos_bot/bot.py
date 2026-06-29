@@ -1,9 +1,30 @@
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler, filters,
 )
 
 from mos_bot.config import BOT_TOKEN
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        pass
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"Health server listening on port {port}")
+    server.serve_forever()
 from mos_bot.states import (
     GOAL, SITUATION, EXPERIENCE, WEIGHT, HEIGHT, AGE,
     TRAINING_DAYS, SESSION_LENGTH, CURRENT_SPLIT, INJURIES,
@@ -134,6 +155,9 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("users", users))
+
+    t = threading.Thread(target=start_health_server, daemon=True)
+    t.start()
 
     print("Muscle OS Bot started. Press Ctrl+C to stop.")
     app.run_polling()
