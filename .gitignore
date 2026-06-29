@@ -1,0 +1,41 @@
+# Environment
+.env
+
+# Vault (497MB — too large for git, deploy separately)
+Muscle Operating System/
+
+# Node
+node_modules/
+
+# Frontend app (separate project)
+muscle-os-alpha/node_modules/
+muscle-os-alpha/dist/
+muscle-os-alpha/.vite/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.log
+
+# Bot data
+mos_bot/data/users/
+mos_bot/data/pdfs/
+mos_bot/data/programs/
+
+# Generated files
+bot_err.txt
+bot_log.txt
+bot_output.log
+*.pdf
+test_e2e_pipeline.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
