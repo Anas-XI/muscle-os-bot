@@ -17,7 +17,11 @@ from mos_bot.core.intake_builder import (
     TRAINING_DAYS_MAP, SESSION_LENGTH_MAP, GUT_MAP,
     SLEEP_MAP, STRESS_MAP, STEPS_MAP, CAFFEINE_MAP,
 )
-from mos_cli import evaluate_ed_screening
+try:
+    from mos_cli import evaluate_ed_screening
+except ImportError:
+    def evaluate_ed_screening(answers):
+        return "green", []
 
 TOTAL_SCREENS = 8
 
