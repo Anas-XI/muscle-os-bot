@@ -90,7 +90,12 @@ class ProfileCreateRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "llm_configured": bool(LLM_API_KEY and LLM_API_URL),
+        "llm_url": (LLM_API_URL or "")[:30] if LLM_API_URL else None,
+        "llm_model": LLM_MODEL or None,
+    }
 
 
 @app.get("/")
