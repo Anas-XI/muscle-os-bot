@@ -53,7 +53,10 @@ def _llm_chat(messages: list[dict], system: str | None = None) -> str | None:
         )
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
-    except Exception:
+    except Exception as exc:
+        import traceback
+        print(f"[LLM ERROR] {type(exc).__name__}: {exc}", flush=True)
+        traceback.print_exc()
         return None
 
 
