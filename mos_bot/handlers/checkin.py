@@ -7,8 +7,17 @@ from mos_bot.states import (
     CHECKIN_SORENESS, CHECKIN_ADHERENCE, CHECKIN_TOP_SETS,
 )
 from mos_bot.core.intake_builder import load_profile, parse_weight
-from checkin_tracker import CheckInStore, CheckInRecord, analyse_trends, suggest_adjustments, format_trends, format_adjustments
 from mos_bot.config import DATA_ROOT
+
+try:
+    from checkin_tracker import CheckInStore, CheckInRecord, analyse_trends, suggest_adjustments, format_trends, format_adjustments
+except ImportError:
+    CheckInStore = None
+    CheckInRecord = None
+    analyse_trends = lambda records: []
+    suggest_adjustments = lambda *a, **kw: []
+    format_trends = lambda trends: ""
+    format_adjustments = lambda adj: ""
 
 
 def _btn(label, data=None):
