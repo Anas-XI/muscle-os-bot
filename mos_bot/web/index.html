@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Muscle OS Coach</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0f;color:#e0e0e0;height:100vh;display:flex}
+/* sidebar */
+#sidebar{width:300px;background:#12121a;border-right:1px solid #222;display:flex;flex-direction:column;flex-shrink:0}
+#sidebar h2{padding:20px;font-size:16px;color:#888;border-bottom:1px solid #222}
+#user-list{flex:1;overflow-y:auto;padding:10px}
+.user-item{padding:12px 16px;border-radius:8px;cursor:pointer;margin-bottom:4px;transition:background .15s;border:1px solid transparent}
+.user-item:hover{background:#1a1a2a}
+.user-item.active{background:#1e3a5f;border-color:#3b82f6}
+.user-item .name{font-size:14px;font-weight:500}
+.user-item .goal{font-size:12px;color:#888;margin-top:2px}
+#sidebar-actions{padding:16px;border-top:1px solid #222;display:flex;flex-direction:column;gap:8px}
+#sidebar-actions button{background:#1e3a5f;color:#fff;border:none;padding:10px;border-radius:8px;cursor:pointer;font-size:13px;transition:background .15s}
+#sidebar-actions button:hover{background:#2a4a7f}
+#sidebar-actions button.new-btn{background:#3b82f6}
+#sidebar-actions button.new-btn:hover{background:#4a92ff}
+/* main */
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#chat-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid #222;min-height:60px}
+#chat-header h1{font-size:18px;font-weight:600}
+#chat-header .sub{font-size:13px;color:#888}
+#chat-messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+.msg{max-width:75%;padding:12px 16px;border-radius:12px;line-height:1.5;font-size:14px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{background:#3b82f6;align-self:flex-end;border-bottom-right-radius:4px}
+.msg.bot{background:#1e1e2a;align-self:flex-start;border-bottom-left-radius:4px}
+.msg.system{background:transparent;align-self:center;color:#888;font-size:12px;padding:8px;text-align:center}
+.msg .time{font-size:11px;color:#888;margin-top:4px;opacity:.7}
+#chat-input-area{display:flex;gap:12px;padding:16px 24px;border-top:1px solid #222;background:#0d0d15}
+#chat-input{flex:1;background:#1a1a2a;border:1px solid #333;border-radius:10px;padding:12px 16px;color:#e0e0e0;font-size:14px;outline:none;resize:none;max-height:120px;font-family:inherit}
+#chat-input:focus{border-color:#3b82f6}
+#send-btn{background:#3b82f6;color:#fff;border:none;border-radius:10px;padding:12px 24px;cursor:pointer;font-size:14px;font-weight:500;transition:background .15s;white-space:nowrap}
+#send-btn:hover{background:#4a92ff}
+#send-btn:disabled{background:#333;cursor:not-allowed}
+/* modals */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:#1a1a2a;border-radius:16px;padding:32px;width:500px;max-width:90vw;max-height:85vh;overflow-y:auto}
+.modal h2{margin-bottom:20px;font-size:20px}
+.modal .field{margin-bottom:14px}
+.modal label{display:block;font-size:13px;color:#888;margin-bottom:4px}
+.modal input,.modal select{width:100%;background:#12121a;border:1px solid #333;border-radius:8px;padding:10px 12px;color:#e0e0e0;font-size:14px;outline:none}
+.modal input:focus,.modal select:focus{border-color:#3b82f6}
+.modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
+.modal-actions button{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:14px}
+.modal-actions .cancel{background:#333;color:#e0e0e0}
+.modal-actions .submit{background:#3b82f6;color:#fff}
+.loading{text-align:center;padding:40px;color:#888}
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h2>Users</h2>
+  <div id="user-list"></div>
+  <div id="sidebar-actions">
+    <button class="new-btn" onclick="showNewUserModal()">+ New User</button>
+    <button onclick="showProfile()">View Profile</button>
+    <button onclick="generateProgram()">Generate Program</button>
+  </div>
+</div>
+<div id="main">
+  <div id="chat-header">
+    <div>
+      <h1 id="chat-title">Muscle OS Coach</h1>
+      <div class="sub" id="chat-sub">Select a user to start</div>
+    </div>
+  </div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-area">
+    <textarea id="chat-input" placeholder="Ask your coach..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+    <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+let state = { users: [], activeUserId: null, messages: {}, sending: false }
+
+async function api(method, path, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} }
+  if (body) opts.body = JSON.stringify(body)
+  const r = await fetch(path, opts)
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || r.statusText) }
+  return r.json()
+}
+
+function sanitize(html) {
+  const d = document.createElement('div'); d.textContent = html; return d.innerHTML
+}
+
+function escHtml(text) {
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function formatTime() {
+  return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+}
+
+function addMessage(userId, role, text) {
+  if (!state.messages[userId]) state.messages[userId] = []
+  state.messages[userId].push({ role, text, time: formatTime() })
+  if (userId === state.activeUserId) renderMessages()
+}
+
+function renderMessages() {
+  const el = document.getElementById('chat-messages')
+  const msgs = state.messages[state.activeUserId] || []
+  if (msgs.length === 0) {
+    el.innerHTML = '<div class="msg system">Send a message to start coaching</div>'
+    return
+  }
+  el.innerHTML = msgs.map(m =>
+    `<div class="msg ${m.role}">${escHtml(m.text)}<div class="time">${m.time}</div></div>`
+  ).join('')
+  el.scrollTop = el.scrollHeight
+}
+
+async function loadUsers() {
+  try {
+    state.users = await api('GET', '/api/profiles')
+  } catch(e) { state.users = [] }
+  renderUsers()
+}
+
+function renderUsers() {
+  const el = document.getElementById('user-list')
+  if (state.users.length === 0) {
+    el.innerHTML = '<div style="color:#666;text-align:center;padding:20px;font-size:13px">No users yet.<br>Create one to start</div>'
+    return
+  }
+  el.innerHTML = state.users.map(u =>
+    `<div class="user-item${u.user_id === state.activeUserId ? ' active' : ''}" onclick="selectUser('${u.user_id}')">
+      <div class="name">${escHtml(u.name)}</div>
+      <div class="goal">${escHtml(u.goal)}${u.date ? ' · ' + u.date : ''}</div>
+    </div>`
+  ).join('')
+}
+
+function selectUser(userId) {
+  state.activeUserId = userId
+  document.getElementById('chat-title').textContent = 'Muscle OS Coach'
+  const u = state.users.find(x => x.user_id === userId)
+  document.getElementById('chat-sub').textContent = u ? `Coaching ${u.name}` : 'Select a user'
+  document.getElementById('send-btn').disabled = false
+  document.getElementById('chat-input').disabled = false
+  document.getElementById('chat-input').focus()
+  renderUsers()
+  renderMessages()
+  if (!state.messages[userId] || state.messages[userId].length === 0) {
+    addMessage(userId, 'bot', 'Hello! I\'m your Muscle OS Coach. Ask me anything about your training, nutrition, or recovery.')
+  }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input')
+  const text = input.value.trim()
+  if (!text || !state.activeUserId || state.sending) return
+  input.value = ''
+  const btn = document.getElementById('send-btn')
+  btn.disabled = true; state.sending = true
+  addMessage(state.activeUserId, 'user', text)
+  try {
+    const res = await api('POST', '/api/chat', { user_id: state.activeUserId, message: text })
+    addMessage(state.activeUserId, 'bot', res.response)
+  } catch(e) {
+    addMessage(state.activeUserId, 'system', 'Error: ' + e.message)
+  }
+  btn.disabled = false; state.sending = false
+}
+
+function showNewUserModal() {
+  const m = document.createElement('div')
+  m.className = 'modal-overlay'
+  m.id = 'new-user-modal'
+  m.innerHTML = `
+    <div class="modal">
+      <h2>New User</h2>
+      <div class="field"><label>Name</label><input id="nu-name" placeholder="e.g. John" /></div>
+      <div class="field"><label>Goal</label>
+        <select id="nu-goal">
+          <option value="hypertrophy">Hypertrophy</option>
+          <option value="fat_loss">Fat Loss</option>
+          <option value="strength">Strength</option>
+          <option value="recomp">Recomposition</option>
+        </select>
+      </div>
+      <div class="field"><label>Situation</label>
+        <select id="nu-situation">
+          <option value="beginner">Beginner</option>
+          <option value="plateaued">Plateaued</option>
+          <option value="overtrained">Overtrained</option>
+          <option value="returning">Returning</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Weight (kg)</label><input id="nu-weight" type="number" value="75" /></div>
+        <div class="field"><label>Height (cm)</label><input id="nu-height" type="number" value="175" /></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Age</label><input id="nu-age" type="number" value="25" /></div>
+        <div class="field"><label>Sex</label>
+          <select id="nu-sex"><option value="male">Male</option><option value="female">Female</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Training Days / Week</label>
+        <select id="nu-days"><option value="2">2</option><option value="4" selected>4</option><option value="5">5</option></select>
+      </div>
+      <div class="field"><label>Session Length</label>
+        <select id="nu-length"><option value="35">35 min</option><option value="60" selected>60 min</option><option value="90">90 min</option><option value="110">110 min</option></select>
+      </div>
+      <div class="field"><label>Experience</label>
+        <select id="nu-exp"><option value="0.5">&lt;1 year</option><option value="2" selected>1-3 years</option><option value="5">3+ years</option></select>
+      </div>
+      <div class="field"><label>Sleep (hours)</label><input id="nu-sleep" type="number" step="0.5" value="7.5" /></div>
+      <div class="modal-actions">
+        <button class="cancel" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="submit" onclick="createUser()">Create</button>
+      </div>
+    </div>`
+  document.body.appendChild(m)
+}
+
+async function createUser() {
+  const data = {
+    user_id: Date.now().toString(),
+    name: document.getElementById('nu-name').value || 'User',
+    goal: document.getElementById('nu-goal').value,
+    situation: document.getElementById('nu-situation').value,
+    bodyweight_kg: parseFloat(document.getElementById('nu-weight').value) || 75,
+    height_cm: parseFloat(document.getElementById('nu-height').value) || 175,
+    age: parseInt(document.getElementById('nu-age').value) || 25,
+    sex: document.getElementById('nu-sex').value,
+    training_days: parseInt(document.getElementById('nu-days').value) || 4,
+    session_length_min: parseInt(document.getElementById('nu-length').value) || 60,
+    experience_years: parseFloat(document.getElementById('nu-exp').value) || 2,
+    current_split: 'PPL',
+    sleep_hours: parseFloat(document.getElementById('nu-sleep').value) || 7.5,
+  }
+  try {
+    await api('POST', '/api/profile', data)
+    document.getElementById('new-user-modal').remove()
+    await loadUsers()
+    selectUser(data.user_id)
+    addMessage(data.user_id, 'bot', `Welcome ${data.name}! I'm your Muscle OS Coach. Tell me about your training goals.`)
+  } catch(e) { alert('Error: ' + e.message) }
+}
+
+async function showProfile() {
+  if (!state.activeUserId) return alert('Select a user first')
+  let profile
+  try { profile = await api('GET', '/api/profile/' + state.activeUserId) }
+  catch(e) { return alert('No profile found. Create a user first.') }
+  const m = document.createElement('div')
+  m.className = 'modal-overlay'
+  const goalLabels = { hypertrophy:'Hypertrophy', fat_loss:'Fat Loss', strength:'Strength', recomp:'Recomp' }
+  m.innerHTML = `
+    <div class="modal">
+      <h2>${sanitize(profile.name)}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px">
+        <div><strong>Goal:</strong> ${goalLabels[profile.goal]||profile.goal}</div>
+        <div><strong>Situation:</strong> ${profile.situation}</div>
+        <div><strong>Weight:</strong> ${profile.bodyweight_kg} kg</div>
+        <div><strong>Height:</strong> ${profile.height_cm} cm</div>
+        <div><strong>Age:</strong> ${profile.age}</div>
+        <div><strong>Sex:</strong> ${profile.sex}</div>
+        <div><strong>Training:</strong> ${profile.training_days}x/week, ${profile.session_length_min}min</div>
+        <div><strong>Experience:</strong> ${profile.experience_years} years</div>
+        <div><strong>Sleep:</strong> ${profile.sleep_hours}h</div>
+        <div><strong>Stress:</strong> ${profile.stress_level}/10</div>
+        <div><strong>Steps:</strong> ${profile.daily_steps}</div>
+        <div><strong>Caffeine:</strong> ${profile.caffeine_mg}mg</div>
+      </div>
+      ${profile.injuries?.length ? `<div style="margin-top:12px"><strong>Injuries:</strong> ${escHtml(profile.injuries.join(', '))}</div>` : ''}
+      <div class="modal-actions"><button class="cancel" onclick="this.closest('.modal-overlay').remove()">Close</button></div>
+    </div>`
+  document.body.appendChild(m)
+}
+
+async function generateProgram() {
+  if (!state.activeUserId) return alert('Select a user first')
+  const btn = event?.target
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating...' }
+  try {
+    const res = await api('POST', '/api/generate', { user_id: state.activeUserId, message: '' })
+    addMessage(state.activeUserId, 'bot', '**Program Generated!**\n\n' + res.program.slice(0, 2000) + '\n\n*(Full program saved)*')
+  } catch(e) {
+    addMessage(state.activeUserId, 'system', 'Generation failed: ' + e.message)
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Generate Program' }
+}
+
+loadUsers()
+</script>
+</body>
+</html>
